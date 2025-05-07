@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <ctime>
 #include "qlearning.h"
+#include "qlearning_openMP.h"
 #include "other_algorithms.h"
 
 // Declare CUDA function
@@ -102,6 +103,7 @@ int main() {
     std::ofstream logOptimalPath("optimal_path_results.csv");
     std::ofstream logCUDA("cuda_results.csv");
     std::ofstream logTimeResults("time_results.csv");
+    std::ofstream logOpenMP("openmp_results.csv");
 
     // Sequential Q-learning
     std::cout << "Starting Sequential Q-learning..." << std::endl;
@@ -110,6 +112,14 @@ int main() {
     auto endSeq = std::chrono::high_resolution_clock::now();
     double timeSeq = std::chrono::duration<double>(endSeq - startSeq).count();
     std::cout << "Sequential Q-learning completed." << std::endl;
+
+    // OpenMP Q-learning
+    std::cout << "Starting OpenMP Q-learning..." << std::endl;
+    auto startOpenMP = std::chrono::high_resolution_clock::now();
+    qLearningOpenMP(n, rMatrix, goal, iterations, logStateSpace, logOpenMP);
+    auto endOpenMP = std::chrono::high_resolution_clock::now();
+    double timeOpenMP = std::chrono::duration<double>(endOpenMP - startOpenMP).count();
+    std::cout << "OpenMP Q-learning completed." << std::endl;
 
     // CUDA Q-learning
     std::cout << "Starting CUDA Q-learning..." << std::endl;
@@ -138,6 +148,7 @@ int main() {
     // Save time comparison
     logTimeResults << "Implementation,Time (s)\n";
     logTimeResults << "Sequential Q-learning," << timeSeq << "\n";
+    logTimeResults << "OpenMP Q-learning," << timeOpenMP << "\n";
     logTimeResults << "CUDA Q-learning," << timeCUDA << "\n";
     logTimeResults << "Dijkstra's Algorithm," << timeDijkstra << "\n";
     logTimeResults << "A* Search Algorithm," << timeAStar << "\n";

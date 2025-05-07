@@ -1,4 +1,6 @@
-Algorithm,Time(ms),Memory(KB)
-Q-learning (OpenMP),8536,156384
-Dijkstra,1945,0
-A*,255,0
+Implementation,Time (s)
+Sequential Q-learning,5.02555
+OpenMP Q-learning,5.49128
+CUDA Q-learning,1.69118
+Dijkstra's Algorithm,0.00441711
+A* Search Algorithm,0.00130753

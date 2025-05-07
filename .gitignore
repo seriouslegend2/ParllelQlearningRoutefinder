@@ -1,0 +1,24 @@
+# Executables
+main
+*.exe
+*.out
+
+# Object files
+*.o
+*.obj
+
+# Build directories
+build/
+debug/
+release/
+
+# IDE specific
+.vscode/
+.idea/
+
+# Dependency directories
+cmake-build-*/
+
+# Generated files
+*.log
+*.csv

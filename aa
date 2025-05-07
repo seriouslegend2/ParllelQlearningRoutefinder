@@ -1,0 +1,6 @@
+Implementation,Time (s)
+Sequential Q-learning,4.39038
+OpenMP Q-learning,5.47663
+CUDA Q-learning,1.69743
+Dijkstra's Algorithm,0.00471054
+A* Search Algorithm,0.00570656
