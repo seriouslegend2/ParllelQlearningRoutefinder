@@ -1,0 +1,4 @@
+Algorithm,Time(ms),Memory(KB)
+Q-learning,1956,264
+Dijkstra,2475,0
+A*,1303,0
