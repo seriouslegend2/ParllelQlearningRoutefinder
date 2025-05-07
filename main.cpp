@@ -1,21 +1,17 @@
 #include <iostream>
+#include <fstream>
 #include <vector>
+#include <chrono>
 #include <cstdlib>
 #include <ctime>
-#include <fstream>
-#include <chrono>
-#include <sys/resource.h> // For memory usage tracking
 #include "qlearning.h"
 #include "other_algorithms.h"
-#include "qlearningcuda.h" // CUDA Q-learning header uses shared global variables
-#include <fstream> // For reading memory usage from /proc/self/statm
-#include <unistd.h> // For sysconf and _SC_PAGESIZE
 
-using namespace std;
-using namespace chrono;
+// Declare CUDA function
+void qLearningCUDA(int n, std::vector<std::vector<double>>& rMatrix, int goal, int max_iterations, std::ofstream& logOptimalPath);
 
 // Function to generate a random connected graph
-void generateRandomGraph(int n, vector<vector<double>>& rMatrix, int goal) {
+void generateRandomGraph(int n, std::vector<std::vector<double>>& rMatrix, int goal) {
     // Initialize all edges to -1.0 (indicating no connection)
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) {
@@ -57,169 +53,96 @@ void generateRandomGraph(int n, vector<vector<double>>& rMatrix, int goal) {
     }
 
     // Debug: Log generated weights
-    cout << "Generated graph weights:" << endl;
+    std::cout << "Generated graph weights:" << std::endl;
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) {
             if (rMatrix[i][j] != INFINITY) {
-                cout << "Edge (" << i << ", " << j << ") -> Weight: " << rMatrix[i][j] << endl;
+                std::cout << "Edge (" << i << ", " << j << ") -> Weight: " << rMatrix[i][j] << std::endl;
             }
         }
     }
-}
-
-// Function to get memory usage in kilobytes from /proc/self/statm
-long getMemoryUsage() {
-    std::ifstream statm("/proc/self/statm");
-    if (!statm.is_open()) {
-        cerr << "Error: Unable to read memory usage from /proc/self/statm." << endl;
-        return 0;
-    }
-    long pages;
-    statm >> pages; // Read the number of memory pages
-    statm.close();
-    return pages * sysconf(_SC_PAGESIZE) / 1024; // Convert pages to kilobytes
 }
 
 int main() {
     srand(time(NULL));
 
     int n, iterations, goal;
-    cout << "Enter the number of fog nodes: ";
-    cin >> n;
+    std::cout << "Enter the number of fog nodes: ";
+    std::cin >> n;
 
-    cout << "Enter the number of iterations (recommended: 5000 or more): ";
-    cin >> iterations;
+    std::cout << "Enter the number of iterations (recommended: 5000 or more): ";
+    std::cin >> iterations;
 
-    cout << "Enter the goal state (0 to " << n - 1 << "): ";
-    cin >> goal;
+    std::cout << "Enter the goal state (0 to " << n - 1 << "): ";
+    std::cin >> goal;
 
     // Validate user inputs
     if (n <= 0) {
-        cout << "Error: Number of fog nodes must be greater than 0." << endl;
+        std::cout << "Error: Number of fog nodes must be greater than 0." << std::endl;
         return -1;
     }
     if (iterations <= 0) {
-        cout << "Error: Number of iterations must be greater than 0." << endl;
+        std::cout << "Error: Number of iterations must be greater than 0." << std::endl;
         return -1;
     }
     if (goal < 0 || goal >= n) {
-        cout << "Error: Goal state must be between 0 and " << n - 1 << "." << endl;
+        std::cout << "Error: Goal state must be between 0 and " << n - 1 << "." << std::endl;
         return -1;
     }
 
-    vector<vector<double>> rMatrix(n, vector<double>(n, -1.0)); // Reward matrix (graph)
+    std::vector<std::vector<double>> rMatrix(n, std::vector<double>(n, -1.0)); // Reward matrix (graph)
     
     // Debug: Log graph generation
-    cout << "Generating random graph..." << endl;
+    std::cout << "Generating random graph..." << std::endl;
     generateRandomGraph(n, rMatrix, goal);
-    cout << "Graph generated successfully." << endl;
+    std::cout << "Graph generated successfully." << std::endl;
 
     // Create log files
-    ofstream logStateSpace("qlearning_results.csv");
-    ofstream logOptimalPath("optimal_path_results.csv");
-    ofstream logTimeResults("time_results.csv");
+    std::ofstream logStateSpace("qlearning_results.csv");
+    std::ofstream logOptimalPath("optimal_path_results.csv");
+    std::ofstream logCUDA("cuda_results.csv");
+    std::ofstream logTimeResults("time_results.csv");
 
-    logStateSpace << "Iteration,State,Q-Values\n";
-    logOptimalPath << "Algorithm,Path\n";
-    logTimeResults << "Algorithm,Time(ms),Memory(KB)\n";
-
-    // Debug: Log algorithm execution
-    cout << "Starting Q-learning..." << endl;
-    auto start_time = high_resolution_clock::now();
-    long start_memory = getMemoryUsage();
+    // Sequential Q-learning
+    std::cout << "Starting Sequential Q-learning..." << std::endl;
+    auto startSeq = std::chrono::high_resolution_clock::now();
     qLearning(n, rMatrix, goal, iterations, logStateSpace, logOptimalPath);
-    auto end_time = high_resolution_clock::now();
-    long end_memory = getMemoryUsage();
-    long qlearning_time = duration_cast<milliseconds>(end_time - start_time).count();
-    long qlearning_memory = end_memory - start_memory;
-    logTimeResults << "Q-learning," << qlearning_time << "," << qlearning_memory << "\n";
-    cout << "Q-learning completed in " << qlearning_time << " ms, memory used: " << qlearning_memory << " KB." << endl;
+    auto endSeq = std::chrono::high_resolution_clock::now();
+    double timeSeq = std::chrono::duration<double>(endSeq - startSeq).count();
+    std::cout << "Sequential Q-learning completed." << std::endl;
 
-    // Debug: Log Q-learning completion
-    cout << "Q-learning results logged to qlearning_results.csv and optimal_path_results.csv." << endl;
+    // CUDA Q-learning
+    std::cout << "Starting CUDA Q-learning..." << std::endl;
+    auto startCUDA = std::chrono::high_resolution_clock::now();
+    qLearningCUDA(n, rMatrix, goal, iterations, logCUDA);
+    auto endCUDA = std::chrono::high_resolution_clock::now();
+    double timeCUDA = std::chrono::duration<double>(endCUDA - startCUDA).count();
+    std::cout << "CUDA Q-learning completed." << std::endl;
 
-    // Debug: Check graph connectivity
-    cout << "Checking graph connectivity..." << endl;
-    bool is_connected = false;
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++) {
-            if (rMatrix[i][j] != -1.0) {
-                is_connected = true;
-                break;
-            }
-        }
-        if (is_connected) break;
-    }
-    if (!is_connected) {
-        cerr << "Error: The generated graph is not connected. Dijkstra's Algorithm cannot proceed." << endl;
-        return -1;
-    }
-    cout << "Graph connectivity check passed." << endl;
-
-    // Debug: Check for negative weights
-    cout << "Checking for negative weights in the graph..." << endl;
-    bool has_negative_weights = false;
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++) {
-            if (rMatrix[i][j] < 0) {
-                has_negative_weights = true;
-                cout << "Negative weight detected on edge (" << i << ", " << j << ") -> Weight: " << rMatrix[i][j] << endl;
-                break;
-            }
-        }
-        if (has_negative_weights) break;
-    }
-    if (has_negative_weights) {
-        cerr << "Error: The generated graph contains negative weights. Exiting." << endl;
-        return -1;
-    }
-    cout << "Graph weight check passed. No negative weights found." << endl;
-
-    // Start Dijkstra's Algorithm
-    cout << "Starting Dijkstra's Algorithm..." << endl;
-    start_time = high_resolution_clock::now();
-    start_memory = getMemoryUsage();
+    // Dijkstra's Algorithm
+    std::cout << "Starting Dijkstra's Algorithm..." << std::endl;
+    auto startDijkstra = std::chrono::high_resolution_clock::now();
     dijkstra(n, rMatrix, 0, goal, logOptimalPath);
-    end_time = high_resolution_clock::now();
-    end_memory = getMemoryUsage();
-    long dijkstra_time = duration_cast<microseconds>(end_time - start_time).count(); // Use microseconds for higher resolution
-    long dijkstra_memory = max(0L, end_memory - start_memory); // Ensure non-negative memory usage
-    logTimeResults << "Dijkstra," << dijkstra_time << "," << dijkstra_memory << "\n";
-    cout << "Dijkstra's Algorithm completed in " << dijkstra_time << " µs, memory used: " << dijkstra_memory << " KB." << endl;
+    auto endDijkstra = std::chrono::high_resolution_clock::now();
+    double timeDijkstra = std::chrono::duration<double>(endDijkstra - startDijkstra).count();
+    std::cout << "Dijkstra's Algorithm completed." << std::endl;
 
-    // Start A* Search Algorithm
-    cout << "Starting A* Search Algorithm..." << endl;
-    start_time = high_resolution_clock::now();
-    start_memory = getMemoryUsage();
+    // A* Search Algorithm
+    std::cout << "Starting A* Search Algorithm..." << std::endl;
+    auto startAStar = std::chrono::high_resolution_clock::now();
     aStar(n, rMatrix, 0, goal, logOptimalPath);
-    end_time = high_resolution_clock::now();
-    end_memory = getMemoryUsage();
-    long astar_time = duration_cast<microseconds>(end_time - start_time).count(); // Use microseconds for higher resolution
-    long astar_memory = max(0L, end_memory - start_memory); // Ensure non-negative memory usage
-    logTimeResults << "A*," << astar_time << "," << astar_memory << "\n";
-    cout << "A* Search Algorithm completed in " << astar_time << " µs, memory used: " << astar_memory << " KB." << endl;
+    auto endAStar = std::chrono::high_resolution_clock::now();
+    double timeAStar = std::chrono::duration<double>(endAStar - startAStar).count();
+    std::cout << "A* Search Algorithm completed." << std::endl;
 
-    // Start CUDA Q-learning
-    cout << "Starting CUDA Q-learning..." << endl;
-    start_time = high_resolution_clock::now();
-    start_memory = getMemoryUsage();
-    qLearning(n, rMatrix, goal, iterations, logStateSpace, logOptimalPath); // Call CUDA Q-learning
-    end_time = high_resolution_clock::now();
-    end_memory = getMemoryUsage();
-    long cuda_qlearning_time = duration_cast<milliseconds>(end_time - start_time).count();
-    long cuda_qlearning_memory = end_memory - start_memory;
-    logTimeResults << "CUDA Q-learning," << cuda_qlearning_time << "," << cuda_qlearning_memory << "\n";
-    cout << "CUDA Q-learning completed in " << cuda_qlearning_time << " ms, memory used: " << cuda_qlearning_memory << " KB." << endl;
+    // Save time comparison
+    logTimeResults << "Implementation,Time (s)\n";
+    logTimeResults << "Sequential Q-learning," << timeSeq << "\n";
+    logTimeResults << "CUDA Q-learning," << timeCUDA << "\n";
+    logTimeResults << "Dijkstra's Algorithm," << timeDijkstra << "\n";
+    logTimeResults << "A* Search Algorithm," << timeAStar << "\n";
 
-    // Debug: Confirm comparison
-    cout << "Comparison of Q-learning, Dijkstra's, and A* results logged to time_results.csv." << endl;
-
-    // Ensure log files are flushed and closed
-    logStateSpace.close();
-    logOptimalPath.close();
-    logTimeResults.close();
-
-    cout << "Results have been logged to qlearning_results.csv, optimal_path_results.csv, and time_results.csv." << endl;
+    std::cout << "Time comparison saved to time_results.csv\n";
 
     return 0;
 }

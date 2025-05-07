@@ -1,0 +1,3 @@
+Implementation,Time (s)
+Sequential,0.000162908
+CUDA,0.18118

@@ -1,286 +1,128 @@
-#include "qlearningcuda.h"
-#include "qlearning.h" // Include for global variables and shared functions
 #include <cuda_runtime.h>
+#include <device_launch_parameters.h>
 #include <curand_kernel.h>
 #include <iostream>
-#include <random> // For random number generation on the CPU
+#include <vector>
+#include <fstream>
+#include <limits>
+#include <cmath>
 
-// Redefine CUDA_CHECK macro
-#define CUDA_CHECK(call)                                                          \
-    do {                                                                          \
-        cudaError_t error = call;                                                 \
-        if (error != cudaSuccess) {                                               \
-            fprintf(stderr, "CUDA error %s:%d, code %d (%s)\n", __FILE__,         \
-                    __LINE__, error, cudaGetErrorString(error));                  \
-            exit(EXIT_FAILURE);                                                   \
-        }                                                                         \
-    } while (0)
+using namespace std;
 
-// Kernel to update Q-matrix
-__global__ void updateQMatrixKernel(double* qMatrix, const double* rMatrix, int n, double learningRate, double gammaLR) {
-    int state = blockIdx.x * blockDim.x + threadIdx.x;
-    int action = blockIdx.y * blockDim.y + threadIdx.y;
+// CUDA kernel for Q-matrix update
+__global__ void updateQKernel(double* rMatrix, double* qMatrix, int n, double gammaLR, double learningRate) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= n * n) return;
 
-    if (state < n && action < n) {
-        double cost = rMatrix[state * n + action];  // rMatrix is flattened in row-major order
+    int currentState = idx / n;
+    int action = idx % n;
 
-        if (cost > 0 && cost != INFINITY) {
-            double reward = -cost;
+    double cost = rMatrix[currentState * n + action];
+    if (cost <= 0 || cost == INFINITY) return;
 
-            // Find max Q-value for the next state
-            double maxQ = -INFINITY;
-            for (int next = 0; next < n; ++next) {
-                maxQ = max(maxQ, qMatrix[action * n + next]);
-            }
+    double reward = -cost;
+    double maxQ = -INFINITY;
 
-            // Update Q-value
-            double target = reward + gammaLR * maxQ;
-            qMatrix[state * n + action] += learningRate * (target - qMatrix[state * n + action]);
-        }
+    for (int next = 0; next < n; next++) {
+        maxQ = max(maxQ, qMatrix[action * n + next]);
     }
+
+    double target = reward + gammaLR * maxQ;
+    qMatrix[currentState * n + action] += learningRate * (target - qMatrix[currentState * n + action]);
 }
 
-// Kernel for epsilon-greedy action selection using parallel reduction
-__global__ void epsilonGreedyActionKernel(double* qMatrix, int* actions, int n, double epsilon, curandState* randState) {
-    int state = blockIdx.x * blockDim.x + threadIdx.x;
+// CUDA kernel for epsilon-greedy action selection using parallel reduction
+__global__ void epsilonGreedyKernel(double* qMatrix, int* availableActions, int n, double epsilon, int* selectedActions, curandState* states) {
+    int state = blockIdx.x;
+    if (state >= n) return;
 
-    if (state < n) {
-        curandState localState = randState[state];
-        double randVal = curand_uniform(&localState);
+    curandState localState = states[state];
+    int actionCount = availableActions[state * n];
+    if (actionCount == 0) return;
 
-        if (randVal < epsilon) {
-            // Take random action
-            actions[state] = state % n; // Simplified random action
-        } else {
-            // Parallel reduction to find the best action
-            __shared__ double sharedMaxQ[32];
-            __shared__ int sharedBestAction[32];
-
-            int threadId = threadIdx.x;
-            double maxQ = -INFINITY;
-            int bestAction = 0;
-
-            for (int action = threadId; action < n; action += blockDim.x) {
-                double qValue = qMatrix[state * n + action];
-                if (qValue > maxQ) {
-                    maxQ = qValue;
-                    bestAction = action;
-                }
-            }
-
-            sharedMaxQ[threadId] = maxQ;
-            sharedBestAction[threadId] = bestAction;
-            __syncthreads();
-
-            // Reduce within the block
-            for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-                if (threadId < stride) {
-                    if (sharedMaxQ[threadId + stride] > sharedMaxQ[threadId]) {
-                        sharedMaxQ[threadId] = sharedMaxQ[threadId + stride];
-                        sharedBestAction[threadId] = sharedBestAction[threadId + stride];
-                    }
-                }
-                __syncthreads();
-            }
-
-            if (threadId == 0) {
-                actions[state] = sharedBestAction[0];
-            }
-        }
-
-        randState[state] = localState;
-    }
-}
-
-// Kernel to initialize curand states
-__global__ void initializeCurandStates(curandState* randState, unsigned long seed, int n) {
-    int id = blockIdx.x * blockDim.x + threadIdx.x;
-    if (id < n) {
-        curand_init(seed, id, 0, &randState[id]);
-    }
-}
-
-// Function to generate a random graph (R-matrix) on the CPU
-void generateRandomGraphCPU(vector<vector<double>>& rMatrix, int n, double maxWeight, double sparsity) {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<> weightDist(1.0, maxWeight); // Random weights
-    std::uniform_real_distribution<> sparsityDist(0.0, 1.0);    // Sparsity control
-
-    rMatrix.resize(n, vector<double>(n, std::numeric_limits<double>::infinity()));
-    for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < n; ++j) {
-            if (i != j && sparsityDist(gen) > sparsity) {
-                rMatrix[i][j] = weightDist(gen); // Assign random weight
-            }
-        }
-    }
-}
-
-// Kernel to generate a random graph (R-matrix) on the GPU
-__global__ void generateRandomGraphKernel(double* rMatrix, int n, double maxWeight, double sparsity, curandState* randState) {
-    int row = blockIdx.x * blockDim.x + threadIdx.x;
-    int col = blockIdx.y * blockDim.y + threadIdx.y;
-
-    if (row < n && col < n) {
-        if (row == col) {
-            rMatrix[row * n + col] = INFINITY; // No self-loops
-        } else {
-            curandState localState = randState[row * n + col];
-            double randWeight = curand_uniform(&localState) * maxWeight;
-            double randSparsity = curand_uniform(&localState);
-
-            if (randSparsity > sparsity) {
-                rMatrix[row * n + col] = randWeight; // Assign random weight
-            } else {
-                rMatrix[row * n + col] = INFINITY; // No edge
-            }
-
-            randState[row * n + col] = localState;
-        }
-    }
-}
-
-// Function to generate a random graph (R-matrix) on the GPU
-void generateRandomGraphGPU(double* rMatrix_d, int n, double maxWeight, double sparsity, curandState* randState_d) {
-    dim3 blockDim(16, 16);
-    dim3 gridDim((n + blockDim.x - 1) / blockDim.x, (n + blockDim.y - 1) / blockDim.y);
-
-    generateRandomGraphKernel<<<gridDim, blockDim>>>(rMatrix_d, n, maxWeight, sparsity, randState_d);
-    CUDA_CHECK(cudaDeviceSynchronize());
-}
-
-// Main CUDA Q-learning function
-void qLearningCUDA(int n, vector<vector<double>>& rMatrix, int goal, int max_iterations,
-                   ofstream& logStateSpace, ofstream& logOptimalPath) {
-    // Flatten rMatrix for CUDA
-    vector<double> rMatrixFlat;
-    for (const auto& row : rMatrix) {
-        rMatrixFlat.insert(rMatrixFlat.end(), row.begin(), row.end());
-    }
-
-    // Allocate CUDA memory
-    double *qMatrix_d, *rMatrix_d;
-    int *actions_d;
-    curandState *randState_d;
-
-    CUDA_CHECK(cudaMalloc((void**)&qMatrix_d, n * n * sizeof(double)));
-    CUDA_CHECK(cudaMalloc((void**)&rMatrix_d, n * n * sizeof(double)));
-    CUDA_CHECK(cudaMalloc((void**)&actions_d, n * sizeof(int)));
-    CUDA_CHECK(cudaMalloc((void**)&randState_d, n * sizeof(curandState)));
-
-    // Initialize Q-matrix on host and copy to device
-    vector<double> qMatrix(n * n, 0.0);
-    CUDA_CHECK(cudaMemcpy(qMatrix_d, qMatrix.data(), n * n * sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(rMatrix_d, rMatrixFlat.data(), n * n * sizeof(double), cudaMemcpyHostToDevice));
-
-    // Initialize random number generator state
-    dim3 blockDim(32);
-    dim3 gridDim((n + blockDim.x - 1) / blockDim.x);
-    initializeCurandStates<<<gridDim, blockDim>>>(randState_d, time(NULL), n);
-    CUDA_CHECK(cudaDeviceSynchronize());
-
-    // Main Training Loop
-    for (int ep = 0; ep < max_iterations; ep++) {
-        // Epsilon-Greedy Action Selection
-        epsilonGreedyActionKernel<<<gridDim, blockDim>>>(qMatrix_d, actions_d, n, epsilon, randState_d);
-        CUDA_CHECK(cudaDeviceSynchronize());
-
-        // Q-Matrix Update
-        dim3 blockDimUpdate(16, 16);
-        dim3 gridDimUpdate((n + blockDimUpdate.x - 1) / blockDimUpdate.x,
-                           (n + blockDimUpdate.y - 1) / blockDimUpdate.y);
-
-        updateQMatrixKernel<<<gridDimUpdate, blockDimUpdate>>>(qMatrix_d, rMatrix_d, n, learningRate, gammaLR);
-        CUDA_CHECK(cudaDeviceSynchronize());
-
-        // Decay epsilon
-        if (epsilon > min_epsilon) {
-            epsilon *= decay_rate;
-        }
-
-        // Log optimal path every 10 episodes
-        if (ep % 10 == 0) {
-            CUDA_CHECK(cudaMemcpy(qMatrix.data(), qMatrix_d, n * n * sizeof(double), cudaMemcpyDeviceToHost));
-            auto result = detectOptimalPath(0, goal, rMatrixFlat, qMatrix, n);
-            vector<int> optimalPath = result.first;
-            double totalCost = result.second;
-            logOptimalPath << "[Episode " << ep << "] ";
-            if (!optimalPath.empty()) {
-                for (int node : optimalPath) {
-                    logOptimalPath << node << " ";
-                }
-                logOptimalPath << " | Cost: " << totalCost << "\n";
-            } else {
-                logOptimalPath << "No path found\n";
-            }
-        }
-    }
-
-    // Clean up CUDA memory
-    CUDA_CHECK(cudaFree(qMatrix_d));
-    CUDA_CHECK(cudaFree(rMatrix_d));
-    CUDA_CHECK(cudaFree(actions_d));
-    CUDA_CHECK(cudaFree(randState_d));
-}
-
-pair<vector<int>, double> detectOptimalPath(int start, int goal, const vector<double>& rMatrixFlat,
-                                            const vector<double>& qMatrixFlat, int n) {
-    vector<int> path;
-    double totalCost = 0.0;
-    int currentState = start;
-    path.push_back(currentState);
-    vector<bool> visited(n, false);
-    visited[currentState] = true;
-    int step_count = 0;
-    const int max_steps = n * 2;  // Prevent infinite loops
-
-    while (currentState != goal && step_count++ < max_steps) {
-        vector<int> actions;
-        for (int j = 0; j < n; j++) {
-            if (rMatrixFlat[currentState * n + j] > 0 &&
-                rMatrixFlat[currentState * n + j] != std::numeric_limits<double>::infinity()) {
-                actions.push_back(j);
-            }
-        }
-
-        if (actions.empty()) {
-            return {{}, std::numeric_limits<double>::infinity()}; // No path found
-        }
-
-        int nextState = -1;
-        double maxQ = -std::numeric_limits<double>::infinity();
-
-        for (int action : actions) {
-            if (!visited[action] && qMatrixFlat[currentState * n + action] > maxQ &&
-                rMatrixFlat[currentState * n + action] != std::numeric_limits<double>::infinity()) {
-                nextState = action;
-                maxQ = qMatrixFlat[currentState * n + action];
-            }
-        }
-
-        if (nextState == -1) {
-            // No valid next state found, try unvisited ones even with lower Q values
-            for (int action : actions) {
-                if (qMatrixFlat[currentState * n + action] > maxQ &&
-                    rMatrixFlat[currentState * n + action] != std::numeric_limits<double>::infinity()) {
-                    nextState = action;
-                    maxQ = qMatrixFlat[currentState * n + action];
-                }
-            }
-            if (nextState == -1)
-                return {{}, std::numeric_limits<double>::infinity()}; // Total failure
-        }
-
-        totalCost += rMatrixFlat[currentState * n + nextState];
-        currentState = nextState;
-        path.push_back(currentState);
-        visited[currentState] = true;
-    }
-
-    if (currentState == goal) {
-        return {path, totalCost};
+    if (curand_uniform(&localState) < epsilon) {
+        selectedActions[state] = availableActions[state * n + (curand(&localState) % actionCount)];
     } else {
-        return {{}, std::numeric_limits<double>::infinity()}; // Path not found
+        __shared__ double sharedMaxQ[256];
+        __shared__ int sharedBestAction[256];
+
+        int tid = threadIdx.x;
+        int actionIdx = tid;
+        double maxQ = -INFINITY;
+        int bestAction = -1;
+
+        while (actionIdx < actionCount) {
+            int action = availableActions[state * n + actionIdx];
+            double qValue = qMatrix[state * n + action];
+            if (qValue > maxQ) {
+                maxQ = qValue;
+                bestAction = action;
+            }
+            actionIdx += blockDim.x;
+        }
+
+        sharedMaxQ[tid] = maxQ;
+        sharedBestAction[tid] = bestAction;
+        __syncthreads();
+
+        // Parallel reduction to find the best action
+        for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+            if (tid < stride) {
+                if (sharedMaxQ[tid + stride] > sharedMaxQ[tid]) {
+                    sharedMaxQ[tid] = sharedMaxQ[tid + stride];
+                    sharedBestAction[tid] = sharedBestAction[tid + stride];
+                }
+            }
+            __syncthreads();
+        }
+
+        if (tid == 0) {
+            selectedActions[state] = sharedBestAction[0];
+        }
+    }
+
+    states[state] = localState;
+}
+
+// Q-learning function
+void qLearningCUDA(int n, vector<vector<double>>& rMatrix, int goal, int max_iterations, ofstream& logOptimalPath) {
+    // Flatten matrices for CUDA
+    vector<double> rMatrixFlat(n * n, 0.0), qMatrixFlat(n * n, 0.0);
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            rMatrixFlat[i * n + j] = rMatrix[i][j];
+        }
+    }
+
+    double *d_rMatrix, *d_qMatrix;
+    cudaMalloc(&d_rMatrix, n * n * sizeof(double));
+    cudaMalloc(&d_qMatrix, n * n * sizeof(double));
+    cudaMemcpy(d_rMatrix, rMatrixFlat.data(), n * n * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_qMatrix, qMatrixFlat.data(), n * n * sizeof(double), cudaMemcpyHostToDevice);
+
+    // Initialize random states for curand
+    curandState* d_states;
+    cudaMalloc(&d_states, n * sizeof(curandState));
+
+    int threadsPerBlock = 256;
+    int blocks = (n * n + threadsPerBlock - 1) / threadsPerBlock;
+
+    for (int ep = 0; ep < max_iterations; ep++) {
+        updateQKernel<<<blocks, threadsPerBlock>>>(d_rMatrix, d_qMatrix, n, 0.95, 0.1);
+        // Removed unnecessary cudaDeviceSynchronize() here
+    }
+
+    cudaMemcpy(qMatrixFlat.data(), d_qMatrix, n * n * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaFree(d_rMatrix);
+    cudaFree(d_qMatrix);
+    cudaFree(d_states);
+
+    // Log final Q-matrix
+    logOptimalPath << "[CUDA Final Q-Matrix]\n";
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            logOptimalPath << qMatrixFlat[i * n + j] << " ";
+        }
+        logOptimalPath << "\n";
     }
 }
