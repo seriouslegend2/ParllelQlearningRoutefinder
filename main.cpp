@@ -7,6 +7,7 @@
 #include <sys/resource.h> // For memory usage tracking
 #include "qlearning.h"
 #include "other_algorithms.h"
+#include "qlearningcuda.h" // CUDA Q-learning header uses shared global variables
 #include <fstream> // For reading memory usage from /proc/self/statm
 #include <unistd.h> // For sysconf and _SC_PAGESIZE
 
@@ -197,6 +198,18 @@ int main() {
     long astar_memory = max(0L, end_memory - start_memory); // Ensure non-negative memory usage
     logTimeResults << "A*," << astar_time << "," << astar_memory << "\n";
     cout << "A* Search Algorithm completed in " << astar_time << " µs, memory used: " << astar_memory << " KB." << endl;
+
+    // Start CUDA Q-learning
+    cout << "Starting CUDA Q-learning..." << endl;
+    start_time = high_resolution_clock::now();
+    start_memory = getMemoryUsage();
+    qLearning(n, rMatrix, goal, iterations, logStateSpace, logOptimalPath); // Call CUDA Q-learning
+    end_time = high_resolution_clock::now();
+    end_memory = getMemoryUsage();
+    long cuda_qlearning_time = duration_cast<milliseconds>(end_time - start_time).count();
+    long cuda_qlearning_memory = end_memory - start_memory;
+    logTimeResults << "CUDA Q-learning," << cuda_qlearning_time << "," << cuda_qlearning_memory << "\n";
+    cout << "CUDA Q-learning completed in " << cuda_qlearning_time << " ms, memory used: " << cuda_qlearning_memory << " KB." << endl;
 
     // Debug: Confirm comparison
     cout << "Comparison of Q-learning, Dijkstra's, and A* results logged to time_results.csv." << endl;

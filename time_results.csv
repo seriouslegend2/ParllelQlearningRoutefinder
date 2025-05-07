@@ -1,4 +1,5 @@
 Algorithm,Time(ms),Memory(KB)
-Q-learning,1956,264
-Dijkstra,2475,0
-A*,1303,0
+Q-learning,75432,7972
+Dijkstra,36630,0
+A*,4596,0
+CUDA Q-learning,49941,0
