@@ -108,10 +108,14 @@ int main() {
     // Sequential Q-learning
     std::cout << "Starting Sequential Q-learning..." << std::endl;
     auto startSeq = std::chrono::high_resolution_clock::now();
-    qLearning(n, rMatrix, goal, iterations, logStateSpace, logOptimalPath);
+    int convergence_iteration = qLearning(n, rMatrix, goal, iterations, logStateSpace, logOptimalPath);
     auto endSeq = std::chrono::high_resolution_clock::now();
     double timeSeq = std::chrono::duration<double>(endSeq - startSeq).count();
-    std::cout << "Sequential Q-learning completed." << std::endl;
+    std::cout << "Sequential Q-learning completed. Converged at iteration: " << convergence_iteration << std::endl;
+
+    // Calculate CUDA iterations (130% of convergence iteration)
+    int cuda_iterations = static_cast<int>(convergence_iteration * 2.3);
+    std::cout << "Using " << cuda_iterations << " iterations for CUDA Q-learning..." << std::endl;
 
     // OpenMP Q-learning
     std::cout << "Starting OpenMP Q-learning..." << std::endl;
@@ -124,7 +128,7 @@ int main() {
     // CUDA Q-learning
     std::cout << "Starting CUDA Q-learning..." << std::endl;
     auto startCUDA = std::chrono::high_resolution_clock::now();
-    qLearningCUDA(n, rMatrix, goal, iterations, logCUDA);
+    qLearningCUDA(n, rMatrix, goal, cuda_iterations, logCUDA);
     auto endCUDA = std::chrono::high_resolution_clock::now();
     double timeCUDA = std::chrono::duration<double>(endCUDA - startCUDA).count();
     std::cout << "CUDA Q-learning completed." << std::endl;

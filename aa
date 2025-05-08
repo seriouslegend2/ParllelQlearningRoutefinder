@@ -4,3 +4,56 @@ OpenMP Q-learning,5.47663
 CUDA Q-learning,1.69743
 Dijkstra's Algorithm,0.00471054
 A* Search Algorithm,0.00570656
+
+
+1500
+openmp
+[Final] 0 627 520 1208 440 1488  | Cost: 9
+
+[CUDA Final Path] 0 107 61 1208 440 1488 | Cost: 9
+
+sequential qlearning
+[Converged at Episode 3557] 0 107 61 1208 440 1488  | Cost: 9
+
+Dijkstra's Path: 0 107 61 1208 440 1488  | Cost: 9
+A* Path: 0 1463 1489 1488  | Cost: 53
+
+nodes:1000
+Implementation,Time (s)
+Sequential Q-learning,410.857
+OpenMP Q-learning,314.82
+CUDA Q-learning,20.1306
+Dijkstra's Algorithm,0.0742742
+A* Search Algorithm,0.00834486
+
+nodes:50
+Implementation,Time (s)
+Sequential Q-learning,0.0615737
+OpenMP Q-learning,0.711252
+CUDA Q-learning,0.254046
+Dijkstra's Algorithm,0.00031301
+A* Search Algorithm,0.00029464
+
+nodes:200
+Implementation,Time (s)
+Sequential Q-learning,2.11942
+OpenMP Q-learning,3.25352
+CUDA Q-learning,0.297333
+Dijkstra's Algorithm,0.00227441
+A* Search Algorithm,0.00064038
+
+nodes:500
+Implementation,Time (s)
+Sequential Q-learning,12.3951
+OpenMP Q-learning,14.5135
+CUDA Q-learning,0.911919
+Dijkstra's Algorithm,0.0064032
+A* Search Algorithm,0.00359426
+
+nodes:700
+Implementation,Time (s)
+Sequential Q-learning,40.7896
+OpenMP Q-learning,36.8152
+CUDA Q-learning,1.79595
+Dijkstra's Algorithm,0.0340197
+A* Search Algorithm,0.000864486

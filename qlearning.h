@@ -23,6 +23,6 @@ int getRandomAction(const vector<int>& availableActions);
 double updateQ(int currentState, int action, vector<vector<double>>& rMatrix, vector<vector<double>>& qMatrix, int goal);
 int epsilonGreedyAction(int state, const vector<vector<double>>& qMatrix, const vector<int>& availableActions);
 pair<vector<int>, double> detectOptimalPath(int start, int goal, const vector<vector<double>>& rMatrix, const vector<vector<double>>& qMatrix);
-void qLearning(int n, vector<vector<double>>& rMatrix, int goal, int max_iterations, ofstream& logStateSpace, ofstream& logOptimalPath);
+int qLearning(int n, vector<vector<double>>& rMatrix, int goal, int max_iterations, ofstream& logStateSpace, ofstream& logOptimalPath);
 
 #endif // QLEARNING_H

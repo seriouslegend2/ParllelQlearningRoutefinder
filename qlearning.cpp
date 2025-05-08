@@ -113,7 +113,7 @@ pair<vector<int>, double> detectOptimalPath(int start, int goal, const vector<ve
     }
 }
 
-void qLearning(int n, vector<vector<double>>& rMatrix, int goal, int max_iterations, ofstream& logStateSpace, ofstream& logOptimalPath) {
+int qLearning(int n, vector<vector<double>>& rMatrix, int goal, int max_iterations, ofstream& logStateSpace, ofstream& logOptimalPath) {
     vector<vector<double>> qMatrix(n, vector<double>(n, 0.0)); // Initialize Q-matrix
     double previousCost = std::numeric_limits<double>::infinity();
     int stableCostCount = 0; // Counter for consecutive stable costs
@@ -168,7 +168,7 @@ void qLearning(int n, vector<vector<double>>& rMatrix, int goal, int max_iterati
             } else {
                 logOptimalPath << "No path found\n";
             }
-            break;
+            return ep;  // Return the convergence iteration
         }
     }
 
@@ -184,4 +184,6 @@ void qLearning(int n, vector<vector<double>>& rMatrix, int goal, int max_iterati
     } else {
         logOptimalPath << "No path found\n";
     }
+
+    return max_iterations;  // Return max_iterations if no convergence
 }
