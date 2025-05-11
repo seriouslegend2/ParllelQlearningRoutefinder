@@ -25,7 +25,7 @@ Ensure the following are installed:
 
 1. Navigate to the project directory:
    ```bash
-   cd c:\Users\varun\Downloads\final HPC
+   find the exec file and copy those commands
    ```
 
 2. Compile and link the program:
