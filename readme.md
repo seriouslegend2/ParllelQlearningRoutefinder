@@ -6,7 +6,6 @@ This project demonstrates high-performance computing techniques, including paral
 
 Ensure the following are installed:
 - Python 3.8 or higher
-- Required Python libraries (see `requirements.txt`)
 - MPI (Message Passing Interface) library (e.g., OpenMPI or MPICH)
 
 ## Installation
