@@ -1,4 +1,0 @@
-[Episode 0] 0 1 2 3 4  | Cost: 172
-[Episode 10] 0 1 2 3 4  | Cost: 172
-[Converged at Episode 10] 0 1 2 3 4  | Cost: 172
-[Final] 0 1 2 3 4  | Cost: 172

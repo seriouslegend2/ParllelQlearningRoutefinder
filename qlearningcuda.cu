@@ -245,7 +245,7 @@ int qLearningCUDA(int n_states, vector<vector<double>>& rMatrix_host, int goal,
     // Prepare data for GPU
     vector<int> availableActions_flat_host = prepareAvailableActions(n_states, rMatrix_host);
     vector<double> rMatrix_flat_host(n_states * n_states);
-    vector<double> qMatrix_flat_host(n_states * n_states, 0.0);
+    vector<double>  qMatrix_flat_host(n_states * n_states, 0.0);
 
     // Flatten R-matrix for GPU
     for (int i = 0; i < n_states; ++i) {

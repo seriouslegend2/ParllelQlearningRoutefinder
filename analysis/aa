@@ -1,12 +1,5 @@
-Implementation,Time (s)
-Sequential Q-learning,4.39038
-OpenMP Q-learning,5.47663
-CUDA Q-learning,1.69743
-Dijkstra's Algorithm,0.00471054
-A* Search Algorithm,0.00570656
 
-
-1500
+nodes:1500
 openmp
 [Final] 0 627 520 1208 440 1488  | Cost: 9
 
@@ -57,3 +50,11 @@ OpenMP Q-learning,36.8152
 CUDA Q-learning,1.79595
 Dijkstra's Algorithm,0.0340197
 A* Search Algorithm,0.000864486
+
+nodes:5000
+Implementation,Time (s)
+Sequential Q-learning,5044.71
+OpenMP Q-learning,3514.49
+CUDA Q-learning,173.149
+Dijkstra's Algorithm,3.32184
+A* Search Algorithm,0.0727079
