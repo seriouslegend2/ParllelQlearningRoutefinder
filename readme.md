@@ -55,13 +55,11 @@ The program outputs:
 Below are some visualizations generated during the analysis:
 
 1. **Execution Time Comparison**  
-   ![Execution Time Comparison](analysis/execution_time_comparison.png)
+   ![Execution Time Comparison](analysis/q_learning_comparative_analysis_corrected.png)
 
 2. **Speedup Analysis**  
-   ![Speedup Analysis](analysis/speedup_analysis.png)
-
-3. **Efficiency Analysis**  
-   ![Efficiency Analysis](analysis/efficiency_analysis.png)
+   ![Speedup Analysis](analysis/openmp_speedup_analysis.png)/
+   ![Speedup Analysis](analysis/cuda_speedup_analysis.png)
 
 For more detailed analysis, refer to the `analysis` folder.
 
