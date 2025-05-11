@@ -1,4 +1,4 @@
-# Qlearning parllelized using CUDA and OpenMP
+#OptimalPathFinder - Qlearning parllelized using CUDA and OpenMP 
 
 This project demonstrates high-performance computing techniques, including parallel algorithms, performance optimizations, and benchmarking tools.
 
